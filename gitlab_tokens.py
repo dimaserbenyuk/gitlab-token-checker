@@ -1,5 +1,3 @@
-from email.message import Message
-
 import requests
 import datetime
 import os
@@ -10,21 +8,19 @@ import boto3
 import json
 from botocore.exceptions import ClientError
 
-# Настройки
 GITLAB_BASE_URL = "https://5d27-2a02-a31a-c282-5880-398e-decf-f98c-1079.ngrok-free.app"
 GITLAB_API_URL = f"{GITLAB_BASE_URL}/api/v4"
 GITLAB_ADMIN_TOKEN = os.environ.get("GITLAB_ADMIN_TOKEN")
 SQS_QUEUE_URL = os.environ.get("SQS_QUEUE_URL")
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL")
 
-# if not GITLAB_ADMIN_TOKEN:
-#     raise EnvironmentError("Missing GITLAB_ADMIN_TOKEN environment variable")
+if not GITLAB_ADMIN_TOKEN:
+    raise EnvironmentError("Missing GITLAB_ADMIN_TOKEN environment variable")
 
 HEADERS = {"PRIVATE-TOKEN": GITLAB_ADMIN_TOKEN}
 EXPIRY_THRESHOLD_DAYS = 30
 WARNING_THRESHOLD_DAYS = 7
 
-# Логирование
 LOGLEVEL = os.environ.get('LOGLEVEL', 'INFO').upper()
 logging.basicConfig(level=LOGLEVEL, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -33,6 +29,8 @@ sqs_client = boto3.client("sqs")
 seen_tokens = {}
 tokens_printed = 0
 expiring_tokens = []
+
+api_failed = True
 
 
 def send_message(queue_url, message_body, message_attributes=None):
@@ -61,10 +59,13 @@ def send_slack_notification(summary, tokens):
             "text": f"✅ *All GitLab tokens are valid.* Checked: {summary['tokens_checked']} at {summary['timestamp']}"
         }
     else:
-        token_lines = [
-            f"• `{t['name']}` expires on `{t['expires_at']}` (scopes: {', '.join(t['scopes'])})"
-            for t in tokens
-        ]
+        token_lines = []
+        for t in tokens:
+            scopes = ', '.join(t['scopes'])
+            link_info = f"\n  Project: {t['url']}" if t.get("url") else f"\n  Source: {t['source']}"
+            token_lines.append(
+                f"• *{t['name']}* expires on `{t['expires_at']}`{link_info}\n  Scopes: _{scopes}_"
+            )
         message = {
             "text": f"⚠️ *Expiring GitLab tokens detected! ({len(tokens)})*\n" + "\n".join(token_lines)
         }
@@ -75,6 +76,23 @@ def send_slack_notification(summary, tokens):
         logger.info("Slack notification sent.")
     except requests.RequestException as e:
         logger.error(f"Failed to send Slack notification: {e}")
+
+
+def send_slack_error_notification(message):
+    if not SLACK_WEBHOOK_URL:
+        logger.warning("SLACK_WEBHOOK_URL is not defined. Skipping Slack error notification.")
+        return
+
+    payload = {
+        "text": f"❌ *GitLab Token Checker Error:*\n{message}"
+    }
+
+    try:
+        resp = requests.post(SLACK_WEBHOOK_URL, json=payload, timeout=5)
+        resp.raise_for_status()
+        logger.info("Slack error notification sent.")
+    except requests.RequestException as e:
+        logger.error(f"Failed to send Slack error notification: {e}")
 
 
 def print_token(token, label=None, link=None):
@@ -91,7 +109,8 @@ def print_token(token, label=None, link=None):
         "scopes": token.get("scopes"),
         "expires_at": token.get("expires_at"),
         "created_at": token.get("created_at"),
-        "source": label or "unknown"
+        "source": label or "unknown",
+        "url": link or None
     })
 
     fields = [
@@ -117,6 +136,7 @@ def get_days_until_expiration(expires_at):
 
 
 def paginated_get(endpoint):
+    global api_failed
     results = []
     for page in range(1, 1000):
         url = f"{GITLAB_API_URL}/{endpoint}?per_page=100&page={page}"
@@ -124,6 +144,7 @@ def paginated_get(endpoint):
             resp = requests.get(url, headers=HEADERS, timeout=5)
             if resp.status_code != 200:
                 break
+            api_failed = False
             data = resp.json()
             if not data:
                 break
@@ -135,6 +156,7 @@ def paginated_get(endpoint):
 
 
 def check_personal_tokens():
+    global api_failed
     for page in range(1, 1000):
         url = f"{GITLAB_API_URL}/personal_access_tokens?per_page=100&page={page}"
         try:
@@ -146,6 +168,7 @@ def check_personal_tokens():
         if resp.status_code != 200:
             break
 
+        api_failed = False
         tokens = resp.json()
         if not tokens:
             break
@@ -165,6 +188,7 @@ def check_personal_tokens():
 
 
 def check_project_tokens():
+    global api_failed
     for project in paginated_get("projects"):
         url = f"{GITLAB_API_URL}/projects/{project['id']}/access_tokens"
         try:
@@ -176,6 +200,7 @@ def check_project_tokens():
         if resp.status_code != 200:
             continue
 
+        api_failed = False
         for token in resp.json():
             if token.get("revoked") or not token.get("active", True):
                 continue
@@ -191,6 +216,7 @@ def check_project_tokens():
 
 
 def check_group_tokens():
+    global api_failed
     for group in paginated_get("groups"):
         url = f"{GITLAB_API_URL}/groups/{group['id']}/access_tokens"
         try:
@@ -202,6 +228,7 @@ def check_group_tokens():
         if resp.status_code != 200:
             continue
 
+        api_failed = False
         for token in resp.json():
             if token.get("revoked") or not token.get("active", True):
                 continue
@@ -216,7 +243,7 @@ def check_group_tokens():
 
 
 def lambda_handler(event=None, context=None):
-    global tokens_printed
+    global tokens_printed, api_failed
     try:
         logger.info("=== Lambda execution started ===")
         logger.info(f"Token length: {len(GITLAB_ADMIN_TOKEN) if GITLAB_ADMIN_TOKEN else 'MISSING'}")
@@ -226,6 +253,16 @@ def lambda_handler(event=None, context=None):
         check_project_tokens()
         logger.info("\n--- Group Tokens ---\n")
         check_group_tokens()
+
+        if api_failed:
+            error_msg = "GitLab API is unavailable. Unable to check tokens."
+            logger.error(f"❌ {error_msg}")
+            send_slack_error_notification(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg,
+                "tokens_checked": 0
+            }
 
         summary = {
             "tokens_checked": tokens_printed,
@@ -257,6 +294,7 @@ def lambda_handler(event=None, context=None):
         logger.error(str(e))
         traceback_str = traceback.format_exc()
         logger.error(traceback_str)
+        send_slack_error_notification(f"Unexpected error:\n{str(e)}")
         return {
             "status": "error",
             "error": str(e),
