@@ -8,6 +8,10 @@ on:
       - "poetry.lock"
       - ".github/workflows/deploy-lambda.yml"
 
+permissions:
+  id-token: write
+  contents: read
+
 env:
   FUNCTION_NAME: gitlab-token-checker
   ZIP_NAME: gitlab-token-checker.zip
