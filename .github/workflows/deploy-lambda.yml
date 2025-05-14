@@ -1,0 +1,57 @@
+name: Build & Upload Lambda
+
+on:
+  push:
+    paths:
+      - "gitlab_tokens.py"
+      - "pyproject.toml"
+      - "poetry.lock"
+      - ".github/workflows/deploy-lambda.yml"
+
+env:
+  FUNCTION_NAME: gitlab-token-checker
+  ZIP_NAME: gitlab-token-checker.zip
+  S3_BUCKET: your-bucket-name
+  S3_KEY: lambdas/gitlab-token-checker.zip
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
+      - name: Install Poetry
+        run: |
+          pip install poetry
+
+      - name: Install dependencies with Poetry
+        run: |
+          poetry export -f requirements.txt --without-hashes > requirements.txt
+          mkdir -p build
+          pip install -r requirements.txt -t build
+
+      - name: Copy source to build directory
+        run: |
+          cp gitlab_tokens.py build/lambda_function.py
+
+      - name: Create deployment zip
+        run: |
+          cd build
+          zip -r9 ../${{ env.ZIP_NAME }} .
+
+      # - name: Configure AWS credentials
+      #   uses: aws-actions/configure-aws-credentials@v3
+      #   with:
+      #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      #     aws-region: eu-central-1
+
+      # - name: Upload Lambda zip to S3
+      #   run: |
+      #     aws s3 cp ${{ env.ZIP_NAME }} s3://${{ env.S3_BUCKET }}/${{ env.S3_KEY }}
