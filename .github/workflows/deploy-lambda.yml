@@ -26,9 +26,11 @@ jobs:
         with:
           python-version: 3.12
 
-      - name: Install Poetry
+      - name: Install Poetry (latest)
         run: |
-          pip install poetry
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          poetry -V
 
       - name: Install dependencies with Poetry
         run: |
