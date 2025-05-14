@@ -13,6 +13,9 @@ env:
   ZIP_NAME: gitlab-token-checker.zip
   S3_BUCKET: your-bucket-name
   S3_KEY: lambdas/gitlab-token-checker.zip
+  AWS_REGION: us-east-1
+  ROLE_TO_ASSUME: arn:aws:iam::272509770066:role/GitHubOIDCRoleForLambdaDeploy
+  ROLE_SESSION_NAME: GitHub_to_AWS_via_FederatedOIDC
 
 jobs:
   deploy:
@@ -50,12 +53,15 @@ jobs:
           cd build
           zip -r9 ../${{ env.ZIP_NAME }} .
 
-      # - name: Configure AWS credentials
-      #   uses: aws-actions/configure-aws-credentials@v3
-      #   with:
-      #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      #     aws-region: eu-central-1
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_TO_ASSUME }}
+          role-session-name: ${{ env.ROLE_SESSION_NAME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Sts GetCallerIdentity
+        run: |
+          aws sts get-caller-identity
 
       # - name: Upload Lambda zip to S3
       #   run: |
