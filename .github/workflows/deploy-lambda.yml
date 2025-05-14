@@ -30,6 +30,7 @@ jobs:
         run: |
           curl -sSL https://install.python-poetry.org | python3 -
           echo "$HOME/.local/bin" >> $GITHUB_PATH
+          poetry self add poetry-plugin-export
           pip install --upgrade pip
           poetry -V
 
