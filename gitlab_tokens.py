@@ -255,7 +255,7 @@ def lambda_handler(event=None, context=None):
         check_group_tokens()
 
         if api_failed:
-            error_msg = "GitLab API is unavailable. Unable to check tokens."
+            error_msg = "GitLab API is unavailable!!! Unable to check tokens."
             logger.error(f"❌ {error_msg}")
             send_slack_error_notification(error_msg)
             return {

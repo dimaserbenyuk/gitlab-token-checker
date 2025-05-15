@@ -58,9 +58,11 @@ resource "aws_iam_policy" "s3_upload_lambda" {
         Effect = "Allow",
         Action = [
           "s3:PutObject",
-          "s3:PutObjectAcl"
+          "s3:PutObjectAcl",
+          "s3:GetObjectAcl",
+          "s3:GetObjectVersion"
         ],
-        Resource = "arn:aws:s3:::your-bucket-name/lambdas/*"
+        Resource = "arn:aws:s3:::example-lambda-67rt/lambdas/*"
       }
     ]
   })
