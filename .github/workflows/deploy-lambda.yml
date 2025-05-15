@@ -15,7 +15,7 @@ permissions:
 env:
   FUNCTION_NAME: gitlab-token-checker
   ZIP_NAME: gitlab-token-checker.zip
-  S3_BUCKET: your-bucket-name
+  S3_BUCKET: example-lambda-67rt
   S3_KEY: lambdas/gitlab-token-checker.zip
   AWS_REGION: us-east-1
   ROLE_TO_ASSUME: arn:aws:iam::272509770066:role/GitHubOIDCRoleForLambdaDeploy
@@ -70,6 +70,6 @@ jobs:
         run: |
           aws sts get-caller-identity
 
-      # - name: Upload Lambda zip to S3
-      #   run: |
-      #     aws s3 cp ${{ env.ZIP_NAME }} s3://${{ env.S3_BUCKET }}/${{ env.S3_KEY }}
+      - name: Upload Lambda zip to S3
+        run: |
+          aws s3 cp ${{ env.ZIP_NAME }} s3://${{ env.S3_BUCKET }}/${{ env.S3_KEY }}
