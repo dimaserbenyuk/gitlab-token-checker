@@ -19,7 +19,7 @@ resource "aws_iam_openid_connect_provider" "github_actions" {
 locals {
   github_subjects = [
     for repo in var.github_repositories :
-    "repo:${repo.org}/${repo.repo}:ref:refs/heads/${lookup(repo, "branch", "*")}"
+    "repo:${repo.org}/${repo.repo}:${lookup(repo, "branch", "*")}"
   ]
 }
 

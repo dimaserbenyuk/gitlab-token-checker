@@ -8,7 +8,7 @@ variable "github_repositories" {
   default = [
     {
       org    = "dimaserbenyuk"
-      repo   = "devops-course"
+      repo   = "*"
       branch = "*"
     }
   ]
