@@ -14,6 +14,11 @@ module "test_lambda" {
       memory_size           = 128
       timeout               = 3
       log_retention_in_days = 7
+      # environment_variables = {
+      #   GITLAB_ADMIN_TOKEN = "..."
+      #   SQS_QUEUE_URL      = "..."
+      #   SLACK_WEBHOOK_URL  = "..."
+      # }
       secrets_manager = {
         enabled                 = false
         recovery_window_in_days = 7
